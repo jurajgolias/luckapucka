@@ -7,20 +7,39 @@ import {
   TouchableOpacity,
   TextInput,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
 import { mockTrainings } from "../models/trainings";
 import { getTeamsByTrainer } from "../models/teams";
+import { getAttendanceByTraining } from "../models/attendance";
+import { useFocusEffect } from "@react-navigation/native";
+import BottomNav from "../components/BottomNav";
 
 export default function TrainingListScreen({ navigation }) {
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      setRefreshKey(prev => prev + 1);
+    }, [])
+  );
 
   // Získať tréningy podľa role
   const getTrainings = () => {
     if (user?.role === "trainer") {
       return mockTrainings.filter((t) => t.trainerId === user.id);
     }
-    // Pre hráča/rodiča - všetky tréningy
+    // Pre hráča/rodiča - iba tréningy tímov v ktorých je
+    if (user?.role === "player") {
+      if (!user?.teamIds || user.teamIds.length === 0) {
+        return []; // Žiadne tréningy ak nie je v žiadnom tíme
+      }
+      return mockTrainings.filter((t) => user.teamIds.includes(t.teamId));
+    }
+    // Default - všetky tréningy
     return mockTrainings;
   };
 
@@ -72,7 +91,7 @@ export default function TrainingListScreen({ navigation }) {
               </Text>
             )}
           </View>
-          {(user?.role === "trainer" || user?.role === "manager") && (
+          {(user?.role === "trainer") && (
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => navigation.navigate("CreateTraining")}
@@ -84,7 +103,7 @@ export default function TrainingListScreen({ navigation }) {
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <MaterialCommunityIcons name="magnify" size={20} color="#999" />
           <TextInput
             style={styles.searchInput}
             placeholder="Hľadať tréningy..."
@@ -108,24 +127,24 @@ export default function TrainingListScreen({ navigation }) {
               <Text style={styles.trainingTitle}>{training.teamName}</Text>
               <View style={styles.trainingInfo}>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoIcon}>📅</Text>
+                  <MaterialCommunityIcons name="calendar" size={18} color="#666" />
                   <Text style={styles.infoText}>
                     {formatDate(training.date)}
                   </Text>
-                  <Text style={styles.infoIcon}>🕐</Text>
+                  <MaterialCommunityIcons name="clock" size={18} color="#666" />
                   <Text style={styles.infoText}>{training.time}</Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoIcon}>📍</Text>
+                  <MaterialCommunityIcons name="map-marker" size={18} color="#666" />
                   <Text style={styles.infoText}>{training.location}</Text>
                 </View>
                 <Text style={styles.trainingDescription}>
                   {training.description}
                 </Text>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoIcon}>👥</Text>
+                  <MaterialCommunityIcons name="account-multiple" size={18} color="#666" />
                   <Text style={styles.infoText}>
-                    {training.confirmed} potvrdených
+                    {getAttendanceByTraining(training.id).confirmed.length} potvrdených
                   </Text>
                 </View>
               </View>
@@ -141,41 +160,7 @@ export default function TrainingListScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={[styles.navItem, styles.navItemActive]}
-          onPress={() => navigation.navigate("TrainingList")}
-        >
-          <Text style={styles.navIcon}>📅</Text>
-          <Text style={[styles.navLabel, styles.navLabelActive]}>
-            Tréningy
-          </Text>
-        </TouchableOpacity>
-        {(user?.role === "manager" || user?.role === "admin") && (
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => navigation.navigate("ManagerDashboard")}
-          >
-            <Text style={styles.navIcon}>👥</Text>
-            <Text style={styles.navLabel}>Dashboard</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Messages")}
-        >
-          <Text style={styles.navIcon}>💬</Text>
-          <Text style={styles.navLabel}>Správy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navLabel}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav navigation={navigation} active="TrainingList" />
     </View>
   );
 }
@@ -233,7 +218,6 @@ const styles = StyleSheet.create({
     borderColor: "#e0e0e0",
   },
   searchIcon: {
-    fontSize: 20,
     marginRight: 8,
   },
   searchInput: {
@@ -272,7 +256,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   infoIcon: {
-    fontSize: 16,
     marginRight: 8,
   },
   infoText: {
@@ -298,33 +281,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#2196F3",
     fontWeight: "500",
-  },
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    paddingVertical: 10,
-    paddingBottom: 20,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  navItemActive: {
-    // Active state
-  },
-  navIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  navLabel: {
-    fontSize: 12,
-    color: "#666",
-  },
-  navLabelActive: {
-    color: "#2196F3",
-    fontWeight: "600",
   },
 });

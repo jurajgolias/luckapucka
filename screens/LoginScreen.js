@@ -70,9 +70,7 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleRegister = () => {
-    // Navigácia na registráciu (kolega to bude robiť)
-    // navigation.navigate("Register");
-    console.log("Navigácia na registráciu - čaká sa na implementáciu");
+    navigation.navigate("Register");
   };
 
   return (

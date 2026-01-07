@@ -55,9 +55,10 @@ export const getTrainingsByTrainer = (trainerId) => {
 };
 
 export const addTraining = (training) => {
+  const nextId = mockTrainings.reduce((max, t) => Math.max(max, t.id), 0) + 1;
   const newTraining = {
     ...training,
-    id: mockTrainings.length + 1,
+    id: nextId,
     confirmed: 0,
     notConfirmed: 0,
   };

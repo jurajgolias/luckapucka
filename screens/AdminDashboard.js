@@ -1,11 +1,136 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
-import { mockUsers } from "../models/users";
+import { mockUsers, addManager, updateManager, deleteManager } from "../models/users";
+import BottomNav from "../components/BottomNav";
 
 export default function AdminDashboard({ navigation }) {
   const { user } = useUser();
-  const managers = mockUsers.filter((u) => u.role === "manager");
+  const [users, setUsers] = useState(mockUsers);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    age: "",
+    password: "",
+  });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    age: "",
+    password: "",
+  });
+  const [error, setError] = useState("");
+
+  const isAdmin = user?.role === "admin";
+  const managers = users.filter((u) => u.role === "manager");
+
+  const resetForms = () => {
+    setForm({ firstName: "", lastName: "", email: "", age: "", password: "" });
+    setEditForm({ firstName: "", lastName: "", email: "", age: "", password: "" });
+    setEditingId(null);
+  };
+
+  const handleAddManager = () => {
+    if (!isAdmin) {
+      setError("Len admin môže pridávať manažérov");
+      return;
+    }
+
+    const trimmedEmail = form.email.trim().toLowerCase();
+    if (!form.firstName.trim() || !form.lastName.trim() || !trimmedEmail) {
+      setError("Vyplňte meno, priezvisko a email");
+      return;
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail)) {
+      setError("Používateľ s týmto emailom už existuje");
+      return;
+    }
+
+    addManager({
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: trimmedEmail,
+      age: form.age,
+      password: form.password || "manazer123",
+    });
+
+    // Sync local state with mutated mock data to avoid duplicate entries
+    setUsers([...mockUsers]);
+    resetForms();
+    setError("");
+    setShowAddForm(false);
+  };
+
+  const handleStartEdit = (manager) => {
+    if (!isAdmin) {
+      setError("Len admin môže upravovať manažérov");
+      return;
+    }
+    setError("");
+    setShowAddForm(false);
+    setEditingId(manager.id);
+    setEditForm({
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+      email: manager.email,
+      age: String(manager.age ?? ""),
+      password: manager.password || "",
+    });
+  };
+
+  const handleUpdateManager = () => {
+    if (!isAdmin) {
+      setError("Len admin môže upravovať manažérov");
+      return;
+    }
+    if (!editingId) return;
+
+    const trimmedEmail = editForm.email.trim().toLowerCase();
+    if (!editForm.firstName.trim() || !editForm.lastName.trim() || !trimmedEmail) {
+      setError("Vyplňte meno, priezvisko a email");
+      return;
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail && u.id !== editingId)) {
+      setError("Používateľ s týmto emailom už existuje");
+      return;
+    }
+
+    updateManager({
+      id: editingId,
+      firstName: editForm.firstName.trim(),
+      lastName: editForm.lastName.trim(),
+      email: trimmedEmail,
+      age: editForm.age,
+      password: editForm.password,
+    });
+
+    setUsers([...mockUsers]);
+    resetForms();
+    setError("");
+  };
+
+  const handleDeleteManager = (id) => {
+    if (!isAdmin) {
+      setError("Len admin môže mazať manažérov");
+      return;
+    }
+
+    deleteManager(id);
+    setUsers([...mockUsers]);
+
+    if (editingId === id) {
+      resetForms();
+    }
+
+    setError("");
+  };
 
   return (
     <View style={styles.container}>
@@ -21,40 +146,205 @@ export default function AdminDashboard({ navigation }) {
               <Text style={styles.cardTitle}>Správa manažérov</Text>
               <Text style={styles.cardSubtitle}>{managers.length} manažérov</Text>
             </View>
-            <TouchableOpacity style={styles.addButton}>
-              <Text style={styles.addButtonText}>+ Pridať</Text>
+            <TouchableOpacity
+              style={[styles.addButton, !isAdmin && styles.addButtonDisabled]}
+              onPress={() => {
+                if (!isAdmin) {
+                  setError("Len admin môže pridávať manažérov");
+                  return;
+                }
+                setError("");
+                setShowAddForm((prev) => !prev);
+              }}
+            >
+              <Text style={styles.addButtonText}>
+                {showAddForm ? "Zrušiť" : "+ Pridať"}
+              </Text>
             </TouchableOpacity>
 
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            {showAddForm && (
+              <View style={styles.formContainer}>
+                <View style={styles.formRow}>
+                  <View style={[styles.inputWrapper, styles.inputSpacing]}>
+                    <Text style={styles.inputLabel}>Meno</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={form.firstName}
+                      onChangeText={(text) => setForm({ ...form, firstName: text })}
+                      placeholder="Zadajte meno"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                  <View style={styles.inputWrapper}>
+                    <Text style={styles.inputLabel}>Priezvisko</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={form.lastName}
+                      onChangeText={(text) => setForm({ ...form, lastName: text })}
+                      placeholder="Zadajte priezvisko"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Text style={styles.inputLabel}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={form.email}
+                    onChangeText={(text) => setForm({ ...form, email: text })}
+                    placeholder="manazer@ta.sk"
+                    placeholderTextColor="#999"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={[styles.inputWrapper, styles.inputSpacing]}>
+                    <Text style={styles.inputLabel}>Vek</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={form.age}
+                      onChangeText={(text) => setForm({ ...form, age: text })}
+                      placeholder="38"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.inputWrapper}>
+                    <Text style={styles.inputLabel}>Heslo</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={form.password}
+                      onChangeText={(text) => setForm({ ...form, password: text })}
+                      placeholder="manazer123"
+                      placeholderTextColor="#999"
+                      secureTextEntry
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.saveButton} onPress={handleAddManager}>
+                  <Text style={styles.saveButtonText}>Uložiť manažéra</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {managers.map((manager) => (
-              <View key={manager.id} style={styles.managerCard}>
-                <View style={styles.managerInfo}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {manager.firstName[0]}{manager.lastName[0]}
-                    </Text>
-                  </View>
-                  <View style={styles.managerDetails}>
-                    <Text style={styles.managerName}>
-                      {manager.firstName} {manager.lastName}
-                    </Text>
-                    <Text style={styles.managerEmail}>{manager.email}</Text>
-                    <View style={styles.roleTag}>
-                      <Text style={styles.roleTagText}>Manažér</Text>
+              <View key={manager.id}>
+                <View style={styles.managerCard}>
+                  <View style={styles.managerInfo}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {manager.firstName[0]}{manager.lastName[0]}
+                      </Text>
                     </View>
-                    <Text style={styles.managerStats}>
-                      {manager.age} rokov • {manager.teams} tímov
-                    </Text>
+                    <View style={styles.managerDetails}>
+                      <Text style={styles.managerName}>
+                        {manager.firstName} {manager.lastName}
+                      </Text>
+                      <Text style={styles.managerEmail}>{manager.email}</Text>
+                      <View style={styles.roleTag}>
+                        <Text style={styles.roleTagText}>Manažér</Text>
+                      </View>
+                      <Text style={styles.managerStats}>
+                        {manager.age} rokov • {manager.teams} tímov
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.managerActions}>
+                    <TouchableOpacity style={styles.editButton} onPress={() => handleStartEdit(manager)}>
+                      <MaterialCommunityIcons name="pencil" size={20} color="#fff" />
+                    </TouchableOpacity>
+                    <View style={{ width: 8 }} />
+                    <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteManager(manager.id)}>
+                      <MaterialCommunityIcons name="trash-can" size={20} color="#fff" />
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.managerActions}>
-                  <TouchableOpacity style={styles.editButton}>
-                    <Text style={styles.editIcon}>✏️</Text>
-                  </TouchableOpacity>
-                  <View style={{ width: 8 }} />
-                  <TouchableOpacity style={styles.deleteButton}>
-                    <Text style={styles.deleteIcon}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
+
+                {editingId === manager.id && (
+                  <View style={styles.formContainer}>
+                    <View style={styles.formRow}>
+                      <View style={[styles.inputWrapper, styles.inputSpacing]}>
+                        <Text style={styles.inputLabel}>Meno</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editForm.firstName}
+                          onChangeText={(text) => setEditForm({ ...editForm, firstName: text })}
+                          placeholder="Zadajte meno"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+                      <View style={styles.inputWrapper}>
+                        <Text style={styles.inputLabel}>Priezvisko</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editForm.lastName}
+                          onChangeText={(text) => setEditForm({ ...editForm, lastName: text })}
+                          placeholder="Zadajte priezvisko"
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>Email</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editForm.email}
+                        onChangeText={(text) => setEditForm({ ...editForm, email: text })}
+                        placeholder="manazer@ta.sk"
+                        placeholderTextColor="#999"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                      />
+                    </View>
+
+                    <View style={styles.formRow}>
+                      <View style={[styles.inputWrapper, styles.inputSpacing]}>
+                        <Text style={styles.inputLabel}>Vek</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editForm.age}
+                          onChangeText={(text) => setEditForm({ ...editForm, age: text })}
+                          placeholder="38"
+                          placeholderTextColor="#999"
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={styles.inputWrapper}>
+                        <Text style={styles.inputLabel}>Heslo</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={editForm.password}
+                          onChangeText={(text) => setEditForm({ ...editForm, password: text })}
+                          placeholder="ponechajte prázdne pre pôvodné"
+                          placeholderTextColor="#999"
+                          secureTextEntry
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.formActions}>
+                      <TouchableOpacity style={[styles.saveButton, styles.saveButtonNarrow]} onPress={handleUpdateManager}>
+                        <Text style={styles.saveButtonText}>Uložiť</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cancelButton, styles.saveButtonNarrow]}
+                        onPress={() => {
+                          resetForms();
+                          setError("");
+                        }}
+                      >
+                        <Text style={styles.cancelButtonText}>Zrušiť</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </View>
             ))}
           </View>
@@ -65,10 +355,10 @@ export default function AdminDashboard({ navigation }) {
             <View style={styles.statsContainer}>
               <View style={styles.statColumn}>
                 <Text style={styles.statLabel}>Celkom používateľov</Text>
-                <Text style={styles.statValue}>{mockUsers.length}</Text>
+                <Text style={styles.statValue}>{users.length}</Text>
                 <Text style={styles.statLabel}>Trénerov</Text>
                 <Text style={styles.statValue}>
-                  {mockUsers.filter((u) => u.role === "trainer").length}
+                  {users.filter((u) => u.role === "trainer").length}
                 </Text>
               </View>
               <View style={styles.statColumn}>
@@ -76,7 +366,7 @@ export default function AdminDashboard({ navigation }) {
                 <Text style={styles.statValue}>{managers.length}</Text>
                 <Text style={styles.statLabel}>Hráčov</Text>
                 <Text style={styles.statValue}>
-                  {mockUsers.filter((u) => u.role === "player").length}
+                  {users.filter((u) => u.role === "player").length}
                 </Text>
               </View>
             </View>
@@ -84,30 +374,7 @@ export default function AdminDashboard({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={[styles.navItem, styles.navItemActive]}
-          onPress={() => navigation.navigate("AdminDashboard")}
-        >
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={[styles.navLabel, styles.navLabelActive]}>Admin</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Messages")}
-        >
-          <Text style={styles.navIcon}>💬</Text>
-          <Text style={styles.navLabel}>Správy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navLabel}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav navigation={navigation} active="AdminDashboard" />
     </View>
   );
 }
@@ -234,18 +501,17 @@ const styles = StyleSheet.create({
   },
   managerActions: {
     flexDirection: "row",
+    gap: 8,
   },
   editButton: {
     padding: 8,
-  },
-  editIcon: {
-    fontSize: 20,
+    backgroundColor: "#2196F3",
+    borderRadius: 6,
   },
   deleteButton: {
     padding: 8,
-  },
-  deleteIcon: {
-    fontSize: 20,
+    backgroundColor: "#f44336",
+    borderRadius: 6,
   },
   statsContainer: {
     flexDirection: "row",
@@ -266,32 +532,78 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 16,
   },
-  bottomNav: {
+  formContainer: {
+    backgroundColor: "#f9f9f9",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  formRow: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    paddingVertical: 10,
-    paddingBottom: 20,
   },
-  navItem: {
+  inputWrapper: {
     flex: 1,
+    marginBottom: 12,
+  },
+  inputSpacing: {
+    marginRight: 12,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#555",
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    fontSize: 14,
+    color: "#333",
+  },
+  saveButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: "center",
-    paddingVertical: 8,
+    marginTop: 4,
   },
-  navItemActive: {
-    // Active state
+  saveButtonNarrow: {
+    flex: 1,
+    marginRight: 8,
   },
-  navIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+  saveButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
-  navLabel: {
-    fontSize: 12,
-    color: "#666",
+  addButtonDisabled: {
+    backgroundColor: "#d1c4e9",
   },
-  navLabelActive: {
-    color: "#2196F3",
+  errorText: {
+    color: "#f44336",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  formActions: {
+    flexDirection: "row",
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    backgroundColor: "#fff",
+  },
+  cancelButtonText: {
+    color: "#333",
+    fontSize: 14,
     fontWeight: "600",
   },
 });

@@ -9,7 +9,12 @@ export const mockAttendance = {
 
 // Funkcie pre prácu s účasťami
 export const getAttendanceByTraining = (trainingId) => {
-  return mockAttendance[trainingId] || { confirmed: [], notConfirmed: [] };
+  const attendance = mockAttendance[trainingId] || { confirmed: [], notConfirmed: [] };
+  // Return a new object copy to ensure React detects changes
+  return {
+    confirmed: [...attendance.confirmed],
+    notConfirmed: [...attendance.notConfirmed]
+  };
 };
 
 export const confirmAttendance = (trainingId, userId) => {

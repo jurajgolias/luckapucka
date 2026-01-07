@@ -7,21 +7,25 @@ import {
   TouchableOpacity,
   TextInput,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
-import { mockTeams } from "../models/teams";
+import { mockTeams, getTeamsByTrainer } from "../models/teams";
 import { addTraining } from "../models/trainings";
 
 export default function CreateTrainingScreen({ navigation, route }) {
   const { user } = useUser();
   const trainingToEdit = route?.params?.training;
 
+  // Filtrujem tímy - tréner vidí len svoje tímy
+  const availableTeams = user?.role === "trainer" 
+    ? getTeamsByTrainer(user.id)
+    : mockTeams;
+
   const [team, setTeam] = useState(
-    trainingToEdit?.teamName || "Futbal U16"
+    trainingToEdit?.teamName || (availableTeams[0]?.name || "Futbal U16")
   );
-  const [date, setDate] = useState(
-    trainingToEdit?.date || "dd/mm/yyyy"
-  );
-  const [time, setTime] = useState(trainingToEdit?.time || "--:--");
+  const [date, setDate] = useState(trainingToEdit?.date || "");
+  const [time, setTime] = useState(trainingToEdit?.time || "");
   const [location, setLocation] = useState(
     trainingToEdit?.location || ""
   );
@@ -31,6 +35,8 @@ export default function CreateTrainingScreen({ navigation, route }) {
   const [description, setDescription] = useState(
     trainingToEdit?.description || ""
   );
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [showRecurrenceDropdown, setShowRecurrenceDropdown] = useState(false);
 
   const recurrenceOptions = [
     { value: "none", label: "Bez opakovania" },
@@ -88,45 +94,65 @@ export default function CreateTrainingScreen({ navigation, route }) {
           {/* Team */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Tím</Text>
-            <View style={styles.selectContainer}>
-              <TextInput
-                style={styles.selectInput}
-                value={team}
-                onChangeText={setTeam}
-                placeholder="Vyberte tím"
-                editable={true}
+            <TouchableOpacity
+              style={styles.selectContainer}
+              onPress={() => setShowTeamDropdown((p) => !p)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectValue}>{team}</Text>
+              <MaterialCommunityIcons
+                name={showTeamDropdown ? "chevron-up" : "chevron-down"}
+                size={22}
+                color="#666"
               />
-              <Text style={styles.chevron}>▼</Text>
-            </View>
+            </TouchableOpacity>
+            {showTeamDropdown && (
+              <View style={styles.dropdownMenu}>
+                {availableTeams.map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setTeam(t.name);
+                      setShowTeamDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{t.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Date */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Dátum</Text>
-            <View style={styles.selectContainer}>
+            <View style={styles.rowInput}>
+              <MaterialCommunityIcons name="calendar" size={20} color="#666" />
               <TextInput
-                style={styles.selectInput}
+                style={styles.textInputInline}
                 value={date}
                 onChangeText={setDate}
-                placeholder="dd/mm/yyyy"
-                editable={true}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#999"
+                keyboardType="numbers-and-punctuation"
               />
-              <Text style={styles.calendarIcon}>📅</Text>
             </View>
           </View>
 
           {/* Time */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Čas</Text>
-            <View style={styles.selectContainer}>
+            <View style={styles.rowInput}>
+              <MaterialCommunityIcons name="clock" size={20} color="#666" />
               <TextInput
-                style={styles.selectInput}
+                style={styles.textInputInline}
                 value={time}
                 onChangeText={setTime}
-                placeholder="--:--"
-                editable={true}
+                placeholder="HH:MM"
+                placeholderTextColor="#999"
+                keyboardType="numbers-and-punctuation"
               />
-              <Text style={styles.clockIcon}>🕐</Text>
             </View>
           </View>
 
@@ -145,17 +171,37 @@ export default function CreateTrainingScreen({ navigation, route }) {
           {/* Recurrence */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Opakovanie</Text>
-            <View style={styles.selectContainer}>
-              <TextInput
-                style={styles.selectInput}
-                value={
-                  recurrenceOptions.find((r) => r.value === recurrence)?.label ||
-                  "Bez opakovania"
-                }
-                editable={false}
+            <TouchableOpacity
+              style={styles.selectContainer}
+              onPress={() => setShowRecurrenceDropdown((p) => !p)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectValue}>
+                {recurrenceOptions.find((r) => r.value === recurrence)?.label ||
+                  "Bez opakovania"}
+              </Text>
+              <MaterialCommunityIcons
+                name={showRecurrenceDropdown ? "chevron-up" : "chevron-down"}
+                size={22}
+                color="#666"
               />
-              <Text style={styles.chevron}>▼</Text>
-            </View>
+            </TouchableOpacity>
+            {showRecurrenceDropdown && (
+              <View style={styles.dropdownMenu}>
+                {recurrenceOptions.map((r) => (
+                  <TouchableOpacity
+                    key={r.value}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setRecurrence(r.value);
+                      setShowRecurrenceDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{r.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Description */}
@@ -199,7 +245,7 @@ export default function CreateTrainingScreen({ navigation, route }) {
           style={styles.navItem}
           onPress={() => navigation.navigate("TrainingList")}
         >
-          <Text style={styles.navIcon}>📅</Text>
+          <MaterialCommunityIcons name="calendar-month" size={24} color="#666" />
           <Text style={styles.navLabel}>Tréningy</Text>
         </TouchableOpacity>
         {(user?.role === "manager" || user?.role === "admin") && (
@@ -297,30 +343,52 @@ const styles = StyleSheet.create({
   selectContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
     borderRadius: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
-  selectInput: {
-    flex: 1,
-    paddingVertical: 12,
+  selectValue: {
     fontSize: 16,
     color: "#333",
   },
-  chevron: {
-    fontSize: 12,
-    color: "#666",
-    marginLeft: 8,
+  rowInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    gap: 10,
   },
-  calendarIcon: {
-    fontSize: 20,
-    marginLeft: 8,
+  textInputInline: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+    paddingVertical: 0,
   },
-  clockIcon: {
-    fontSize: 20,
-    marginLeft: 8,
+  dropdownMenu: {
+    marginTop: 6,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    overflow: "hidden",
+  },
+  dropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f4f4f4",
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: "#333",
   },
   buttonRow: {
     flexDirection: "row",
@@ -367,10 +435,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingVertical: 8,
-  },
-  navIcon: {
-    fontSize: 24,
-    marginBottom: 4,
   },
   navLabel: {
     fontSize: 12,

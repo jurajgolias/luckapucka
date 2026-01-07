@@ -7,17 +7,19 @@ import {
   TouchableOpacity,
   TextInput,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
-import { getChatById, getMessagesByChatId, addMessage } from "../models/messages";
+import { getChatroomById, getMessagesByChatroomId, addMessage } from "../models/messages";
+import { mockUsers } from "../models/users";
 
 export default function ChatDetailScreen({ navigation, route }) {
   const { user } = useUser();
-  const { chatId } = route.params;
-  const chat = getChatById(chatId);
-  const [messages, setMessages] = useState(getMessagesByChatId(chatId));
+  const { chatroomId } = route.params;
+  const chatroom = getChatroomById(chatroomId);
+  const [messages, setMessages] = useState(getMessagesByChatroomId(chatroomId));
   const [messageText, setMessageText] = useState("");
 
-  if (!chat) {
+  if (!chatroom) {
     return (
       <View style={styles.container}>
         <Text>Chat nebol nájdený</Text>
@@ -25,32 +27,50 @@ export default function ChatDetailScreen({ navigation, route }) {
     );
   }
 
-  const getInitials = (name) => {
-    if (name && name.length > 0) {
-      return name[0].toUpperCase();
+  const getChatroomInfo = () => {
+    if (chatroom.type === "group") {
+      return {
+        name: chatroom.name,
+        subtitle: `${chatroom.participants.length} členov`,
+        avatar: chatroom.name[0],
+      };
+    } else {
+      const otherUserId = chatroom.participants.find((id) => id !== user?.id);
+      const otherUser = mockUsers.find((u) => u.id === otherUserId);
+      return {
+        name: otherUser ? `${otherUser.firstName} ${otherUser.lastName}` : "Používateľ",
+        subtitle: otherUser?.role || "",
+        avatar: otherUser ? `${otherUser.firstName[0]}${otherUser.lastName[0]}` : "U",
+      };
+    }
+  };
+
+  const chatroomInfo = getChatroomInfo();
+
+  const getUserById = (userId) => {
+    return mockUsers.find((u) => u.id === userId);
+  };
+
+  const getInitials = (text) => {
+    if (text && text.length > 0) {
+      return text.substring(0, 2).toUpperCase();
     }
     return "?";
   };
 
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString("sk-SK", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const handleSend = () => {
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || !user) return;
 
-    const newMessage = {
-      senderId: user?.id || 1,
-      senderName: user ? `${user.firstName} ${user.lastName}` : "User",
-      senderInitials: user
-        ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
-        : "U",
-      text: messageText,
-      time: new Date().toLocaleTimeString("sk-SK", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      isOwn: true,
-    };
-
-    addMessage(chatId, newMessage);
-    setMessages([...messages, newMessage]);
+    addMessage(chatroomId, user.id, messageText.trim());
+    setMessages(getMessagesByChatroomId(chatroomId));
     setMessageText("");
   };
 
@@ -62,16 +82,14 @@ export default function ChatDetailScreen({ navigation, route }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <MaterialCommunityIcons name="arrow-left" size={24} color="#333" />
         </TouchableOpacity>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(chat.avatar)}</Text>
+          <Text style={styles.avatarText}>{getInitials(chatroomInfo.avatar)}</Text>
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.chatTitle}>{chat.name}</Text>
-          <Text style={styles.chatSubtitle}>
-            {chat.type === "group" ? "Skupinový chat" : "Súkromný chat"}
-          </Text>
+          <Text style={styles.chatTitle}>{chatroomInfo.name}</Text>
+          <Text style={styles.chatSubtitle}>{chatroomInfo.subtitle}</Text>
         </View>
       </View>
 
@@ -81,49 +99,64 @@ export default function ChatDetailScreen({ navigation, route }) {
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
       >
-        {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageContainer,
-              message.isOwn ? styles.messageOwn : styles.messageOther,
-            ]}
-          >
-            {!message.isOwn && (
-              <View style={styles.messageAvatar}>
-                <Text style={styles.messageAvatarText}>
-                  {message.senderInitials}
-                </Text>
-              </View>
-            )}
-            <View
-              style={[
-                styles.messageBubble,
-                message.isOwn ? styles.messageBubbleOwn : styles.messageBubbleOther,
-              ]}
-            >
-              {!message.isOwn && (
-                <Text style={styles.messageSender}>{message.senderName}</Text>
-              )}
-              <Text
-                style={[
-                  styles.messageText,
-                  message.isOwn ? styles.messageTextOwn : styles.messageTextOther,
-                ]}
-              >
-                {message.text}
-              </Text>
-              <Text
-                style={[
-                  styles.messageTime,
-                  message.isOwn ? styles.messageTimeOwn : styles.messageTimeOther,
-                ]}
-              >
-                {message.time}
-              </Text>
-            </View>
+        {messages.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="chat-outline" size={48} color="#999" />
+            <Text style={styles.emptyStateText}>Žiadne správy</Text>
+            <Text style={styles.emptyStateSubtext}>Začnite konverzáciu</Text>
           </View>
-        ))}
+        ) : (
+          messages.map((message) => {
+            const isOwn = message.senderId === user?.id;
+            const sender = getUserById(message.senderId);
+            
+            return (
+              <View
+                key={message.id}
+                style={[
+                  styles.messageContainer,
+                  isOwn ? styles.messageOwn : styles.messageOther,
+                ]}
+              >
+                {!isOwn && (
+                  <View style={styles.messageAvatar}>
+                    <Text style={styles.messageAvatarText}>
+                      {sender ? `${sender.firstName[0]}${sender.lastName[0]}` : "U"}
+                    </Text>
+                  </View>
+                )}
+                <View
+                  style={[
+                    styles.messageBubble,
+                    isOwn ? styles.messageBubbleOwn : styles.messageBubbleOther,
+                  ]}
+                >
+                  {!isOwn && chatroom.type === "group" && (
+                    <Text style={styles.messageSender}>
+                      {sender ? `${sender.firstName} ${sender.lastName}` : "Používateľ"}
+                    </Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.messageText,
+                      isOwn ? styles.messageTextOwn : styles.messageTextOther,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.messageTime,
+                      isOwn ? styles.messageTimeOwn : styles.messageTimeOther,
+                    ]}
+                  >
+                    {formatTime(message.timestamp)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Input */}
@@ -138,7 +171,7 @@ export default function ChatDetailScreen({ navigation, route }) {
           autoCorrect={false}
         />
         <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-          <Text style={styles.sendIcon}>✈️</Text>
+          <MaterialCommunityIcons name="send" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -148,21 +181,21 @@ export default function ChatDetailScreen({ navigation, route }) {
           style={styles.navItem}
           onPress={() => navigation.navigate("TrainingList")}
         >
-          <Text style={styles.navIcon}>📅</Text>
+          <MaterialCommunityIcons name="calendar-month" size={24} color="#666" />
           <Text style={styles.navLabel}>Tréningy</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.navItem, styles.navItemActive]}
           onPress={() => navigation.navigate("Messages")}
         >
-          <Text style={styles.navIcon}>💬</Text>
+          <MaterialCommunityIcons name="chat" size={24} color="#2196F3" />
           <Text style={[styles.navLabel, styles.navLabelActive]}>Správy</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
           onPress={() => navigation.navigate("Profile")}
         >
-          <Text style={styles.navIcon}>👤</Text>
+          <MaterialCommunityIcons name="account" size={24} color="#666" />
           <Text style={styles.navLabel}>Profil</Text>
         </TouchableOpacity>
       </View>
@@ -187,10 +220,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: "#333",
   },
   avatar: {
     width: 40,
@@ -314,9 +343,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 8,
   },
-  sendIcon: {
-    fontSize: 20,
-  },
   bottomNav: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -328,21 +354,33 @@ const styles = StyleSheet.create({
   navItem: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: 8,
   },
   navItemActive: {
-    // Active state
-  },
-  navIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+    // Active state styling can be added here
   },
   navLabel: {
     fontSize: 12,
     color: "#666",
+    marginTop: 4,
   },
   navLabelActive: {
     color: "#2196F3",
     fontWeight: "600",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: "#666",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 4,
   },
 });

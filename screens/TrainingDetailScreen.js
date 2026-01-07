@@ -1,22 +1,39 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  TextInput,
 } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
-import { getTrainingById } from "../models/trainings";
+import { getTrainingById, updateTraining, deleteTraining } from "../models/trainings";
 import { getAttendanceByTraining } from "../models/attendance";
 import { confirmAttendance, unconfirmAttendance } from "../models/attendance";
 import { mockUsers } from "../models/users";
+import BottomNav from "../components/BottomNav";
 
 export default function TrainingDetailScreen({ navigation, route }) {
   const { user } = useUser();
   const { trainingId } = route.params;
   const training = getTrainingById(trainingId);
-  const attendance = getAttendanceByTraining(trainingId);
+  const [attendance, setAttendance] = useState(getAttendanceByTraining(trainingId));
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    date: training?.date || "",
+    time: training?.time || "",
+    location: training?.location || "",
+    description: training?.description || "",
+  });
+
+  // Update attendance when it changes
+  useEffect(() => {
+    setAttendance(getAttendanceByTraining(trainingId));
+  }, [trainingId]);
 
   if (!training) {
     return (
@@ -78,17 +95,33 @@ export default function TrainingDetailScreen({ navigation, route }) {
   const handleConfirm = () => {
     if (user) {
       confirmAttendance(trainingId, user.id);
-      navigation.goBack();
-      navigation.navigate("TrainingList");
+      setAttendance(getAttendanceByTraining(trainingId)); // Update state
     }
   };
 
   const handleUnconfirm = () => {
     if (user) {
       unconfirmAttendance(trainingId, user.id);
-      navigation.goBack();
-      navigation.navigate("TrainingList");
+      setAttendance(getAttendanceByTraining(trainingId)); // Update state
     }
+  };
+
+  const handleSaveEdit = () => {
+    if (!user || user.role !== "trainer") return;
+    updateTraining(trainingId, {
+      date: editForm.date,
+      time: editForm.time,
+      location: editForm.location,
+      description: editForm.description,
+    });
+    setShowEditModal(false);
+  };
+
+  const handleDelete = () => {
+    if (!user || user.role !== "trainer") return;
+    deleteTraining(trainingId);
+    setShowDeleteModal(false);
+    navigation.goBack();
   };
 
   const confirmedUsers = attendance.confirmed.map((id) =>
@@ -112,18 +145,38 @@ export default function TrainingDetailScreen({ navigation, route }) {
           <Text style={styles.title}>{training.teamName}</Text>
         </View>
 
+        {/* Trainer Actions */}
+        {user?.role === "trainer" && user?.id === training.trainerId && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() => setShowEditModal(true)}
+            >
+              <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Upraviť</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => setShowDeleteModal(true)}
+            >
+              <MaterialCommunityIcons name="trash-can" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Zmazať</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Training Info Card */}
         <View style={styles.card}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoIcon}>📅</Text>
+            <MaterialCommunityIcons name="calendar" size={18} color="#666" />
             <Text style={styles.infoText}>{formatDate(training.date)}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoIcon}>🕐</Text>
+            <MaterialCommunityIcons name="clock" size={18} color="#666" />
             <Text style={styles.infoText}>{training.time}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoIcon}>📍</Text>
+            <MaterialCommunityIcons name="map-marker" size={18} color="#666" />
             <Text style={styles.infoText}>{training.location}</Text>
           </View>
           {training.recurrence && training.recurrence !== "none" && (
@@ -162,7 +215,7 @@ export default function TrainingDetailScreen({ navigation, route }) {
         {/* Attendance List */}
         <View style={styles.card}>
           <View style={styles.attendanceHeader}>
-            <Text style={styles.attendanceIcon}>👥</Text>
+            <MaterialCommunityIcons name="account-multiple" size={20} color="#666" />
             <Text style={styles.cardTitle}>Účasť</Text>
           </View>
 
@@ -198,32 +251,110 @@ export default function TrainingDetailScreen({ navigation, route }) {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={[styles.navItem, styles.navItemActive]}
-          onPress={() => navigation.navigate("TrainingList")}
-        >
-          <Text style={styles.navIcon}>📅</Text>
-          <Text style={[styles.navLabel, styles.navLabelActive]}>
-            Tréningy
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Messages")}
-        >
-          <Text style={styles.navIcon}>💬</Text>
-          <Text style={styles.navLabel}>Správy</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navLabel}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Edit Modal */}
+      <Modal
+        transparent
+        visible={showEditModal}
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Upraviť tréning</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Dátum</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editForm.date}
+                onChangeText={(v) => setEditForm({ ...editForm, date: v })}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#999"
+              />
+
+              <Text style={styles.inputLabel}>Čas</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editForm.time}
+                onChangeText={(v) => setEditForm({ ...editForm, time: v })}
+                placeholder="HH:MM"
+                placeholderTextColor="#999"
+              />
+
+              <Text style={styles.inputLabel}>Miesto</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editForm.location}
+                onChangeText={(v) => setEditForm({ ...editForm, location: v })}
+                placeholder="Názov lokácie"
+                placeholderTextColor="#999"
+              />
+
+              <Text style={styles.inputLabel}>Popis</Text>
+              <TextInput
+                style={[styles.modalInput, { height: 100, textAlignVertical: "top" }]}
+                value={editForm.description}
+                onChangeText={(v) => setEditForm({ ...editForm, description: v })}
+                multiline
+                numberOfLines={4}
+                placeholder="Obsah tréningu"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancel]}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Zrušiť</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSave]}
+                onPress={handleSaveEdit}
+              >
+                <Text style={styles.modalSaveText}>Uložiť</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirm Modal */}
+      <Modal
+        transparent
+        visible={showDeleteModal}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmContent}>
+            <Text style={styles.confirmTitle}>Zmazať tréning?</Text>
+            <Text style={styles.confirmText}>Táto akcia je nezvratná.</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancel]}
+                onPress={() => setShowDeleteModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Nie</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalDelete]}
+                onPress={handleDelete}
+              >
+                <Text style={styles.modalDeleteText}>Áno, zmazať</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <BottomNav navigation={navigation} active="TrainingList" />
     </View>
   );
 }
@@ -258,6 +389,32 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 0,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  editButton: {
+    backgroundColor: "#2196F3",
+  },
+  deleteButton: {
+    backgroundColor: "#f44336",
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -274,10 +431,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-  },
-  infoIcon: {
-    fontSize: 20,
-    marginRight: 12,
   },
   infoText: {
     fontSize: 16,
@@ -344,10 +497,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  attendanceIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
   attendanceSubtitle: {
     fontSize: 16,
     fontWeight: "600",
@@ -381,32 +530,106 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
   },
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    paddingVertical: 10,
-    paddingBottom: 20,
-  },
-  navItem: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 8,
+    padding: 20,
   },
-  navItemActive: {
-    // Active state
+  modalContent: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingBottom: 16,
+    overflow: "hidden",
   },
-  navIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+  confirmContent: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
   },
-  navLabel: {
-    fontSize: 12,
-    color: "#666",
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
-  navLabelActive: {
-    color: "#2196F3",
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+  },
+  modalBody: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
     fontWeight: "600",
+    color: "#333",
+  },
+  modalInput: {
+    backgroundColor: "#f7f7f7",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    fontSize: 15,
+    color: "#333",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  modalCancel: {
+    borderColor: "#e0e0e0",
+    backgroundColor: "#fff",
+  },
+  modalSave: {
+    borderColor: "#2196F3",
+    backgroundColor: "#2196F3",
+  },
+  modalDelete: {
+    borderColor: "#f44336",
+    backgroundColor: "#f44336",
+  },
+  modalCancelText: {
+    color: "#333",
+    fontWeight: "600",
+  },
+  modalSaveText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  modalDeleteText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+  },
+  confirmText: {
+    fontSize: 14,
+    color: "#666",
   },
 });
